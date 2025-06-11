@@ -1,8 +1,8 @@
-# 
-# Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual 
-# property and proprietary rights in and to this software and related documentation. 
-# Any commercial use, reproduction, disclosure or distribution of this software and 
-# related documentation without an express license agreement from Toyota Motor Europe NV/SA 
+#
+# Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual
+# property and proprietary rights in and to this software and related documentation.
+# Any commercial use, reproduction, disclosure or distribution of this software and
+# related documentation without an express license agreement from Toyota Motor Europe NV/SA
 # is strictly prohibited.
 #
 
@@ -13,6 +13,7 @@ from typing import Optional, Literal, Tuple
 import tyro
 import importlib
 from vhap.util.log import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -27,7 +28,9 @@ class Config:
         if hasattr(self, __name):
             return getattr(self, __name)
         else:
-            raise AttributeError(f"{self.__class__.__name__} has no attribute '{__name}'")
+            raise AttributeError(
+                f"{self.__class__.__name__} has no attribute '{__name}'"
+            )
 
 
 @dataclass()
@@ -44,16 +47,16 @@ class DataConfig(Config):
     """Whether the cameras parameters are available"""
     align_cameras_to_axes: bool = True
     """Adjust how cameras distribute in the space with a global rotation"""
-    camera_convention_conversion: str = 'opencv->opengl'
-    target_extrinsic_type: Literal['w2c', 'c2w'] = 'w2c'
+    camera_convention_conversion: str = "opencv->opengl"
+    target_extrinsic_type: Literal["w2c", "c2w"] = "w2c"
     n_downsample_rgb: Optional[int] = None
     """Load from downsampled RGB images to save data IO time"""
     scale_factor: float = 1.0
     """Further apply a scaling transformation after the downsampling of RGB"""
-    background_color: Optional[Literal['white', 'black']] = 'white'
+    background_color: Optional[Literal["white", "black"]] = "white"
     use_alpha_map: bool = False
     use_landmark: bool = True
-    landmark_source: Optional[Literal['face-alignment', 'star']] = "star"
+    landmark_source: Optional[Literal["face-alignment", "star"]] = "star"
 
 
 @dataclass()
@@ -78,33 +81,43 @@ class ModelConfig(Config):
     tex_extra: bool = True
     """Optimize an extra texture map as the base texture map or the residual texture map"""
     # tex_clusters: tuple[str, ...] = ("skin", "hair", "sclerae", "lips_tight", "boundary")
-    tex_clusters: tuple[str, ...] = ("skin", "hair", "boundary", "lips_tight", "teeth", "sclerae", "irises")
+    tex_clusters: tuple[str, ...] = (
+        "skin",
+        "hair",
+        "boundary",
+        "lips_tight",
+        "teeth",
+        "sclerae",
+        "irises",
+    )
     """Regions that are supposed to share a similar color inside"""
     residual_tex: bool = True
     """Use the extra texture map as a residual component on top of the base texture"""
-    occluded: tuple[str, ...] = ()  # to be used for updating stage configs in __post_init__
+    occluded: tuple[
+        str, ...
+    ] = ()  # to be used for updating stage configs in __post_init__
     """The regions that are occluded by the hair or garments"""
-    
+
     flame_params_path: Optional[Path] = None
 
 
 @dataclass()
 class RenderConfig(Config):
-    backend: Literal['nvdiffrast', 'pytorch3d'] = 'nvdiffrast'
+    backend: Literal["nvdiffrast", "pytorch3d"] = "nvdiffrast"
     """The rendering backend"""
     use_opengl: bool = False
     """Use OpenGL for NVDiffRast"""
-    background_train: Literal['white', 'black', 'target'] = 'target'
+    background_train: Literal["white", "black", "target"] = "target"
     """Background color/image for training"""
     disturb_rate_fg: Optional[float] = 0.5
     """The rate of disturbance for the foreground"""
     disturb_rate_bg: Optional[float] = 0.5
     """The rate of disturbance for the background. 0.6 best for multi-view, 0.3 best for single-view"""
-    background_eval: Literal['white', 'black', 'target'] = 'target'
+    background_eval: Literal["white", "black", "target"] = "target"
     """Background color/image for evaluation"""
-    lighting_type: Literal['constant', 'front', 'front-range', 'SH'] = 'SH'
+    lighting_type: Literal["constant", "front", "front-range", "SH"] = "SH"
     """The type of lighting"""
-    lighting_space: Literal['world', 'camera'] = 'world'
+    lighting_space: Literal["world", "camera"] = "world"
     """The space of lighting"""
 
 
@@ -122,11 +135,11 @@ class LearningRateConfig(Config):
 
 @dataclass()
 class LossWeightConfig(Config):
-    landmark: Optional[float] = 10.
+    landmark: Optional[float] = 10.0
     always_enable_jawline_landmarks: bool = True
     """Always enable the landmark loss for the jawline landmarks. Ignore disable_jawline_landmarks in stages."""
 
-    photo: Optional[float] = 30.
+    photo: Optional[float] = 30.0
 
     # L2 regularization
     reg_shape: float = 3e-1
@@ -154,7 +167,7 @@ class LossWeightConfig(Config):
     # L2 regularization for static_offset
     reg_offset: Optional[float] = 3e2
     """Regularize the norm of offsets"""
-    reg_offset_relax_coef: float = 1.
+    reg_offset_relax_coef: float = 1.0
     """The coefficient for relaxing reg_offset for the regions specified"""
     reg_offset_relax_for: tuple[str, ...] = ("hair", "ears")
     """Relax the offset loss for the regions specified"""
@@ -170,7 +183,14 @@ class LossWeightConfig(Config):
     # local rigidity regularization for static_offset
     reg_offset_rigid: Optional[float] = 3e2
     """Regularize the the offsets to be as-rigid-as-possible"""
-    reg_offset_rigid_for: tuple[str, ...] = ("left_ear", "right_ear", "neck", "left_eye", "right_eye", "lips_tight")
+    reg_offset_rigid_for: tuple[str, ...] = (
+        "left_ear",
+        "right_ear",
+        "neck",
+        "left_eye",
+        "right_eye",
+        "lips_tight",
+    )
     """Regularize the the offsets to be as-rigid-as-possible for the regions specified"""
 
     reg_offset_dynamic: Optional[float] = 3e5
@@ -178,7 +198,7 @@ class LossWeightConfig(Config):
 
     blur_iter: int = 0
     """The number of iterations for blurring vertex weights"""
-    
+
     # temporal smoothness
     smooth_trans: float = 3e2
     """global translation"""
@@ -192,7 +212,7 @@ class LossWeightConfig(Config):
     """eyes joints"""
     smooth_expr: float = 1e0
     """expression"""
-    
+
 
 @dataclass()
 class LogConfig(Config):
@@ -200,7 +220,7 @@ class LogConfig(Config):
     """The step interval of scalar logging. Using an interval of stage_tracking.num_steps // 5 unless specified."""
     interval_media: Optional[int] = 500
     """The step interval of media logging. Using an interval of stage_tracking.num_steps unless specified."""
-    image_format: Literal['jpg', 'png'] = 'jpg'
+    image_format: Literal["jpg", "png"] = "jpg"
     """Output image format"""
     view_indices: Tuple[int, ...] = ()
     """Manually specify the view indices for log"""
@@ -211,86 +231,143 @@ class LogConfig(Config):
 
 @dataclass()
 class ExperimentConfig(Config):
-    output_folder: Path = Path('output/track')
+    output_folder: Path = Path("output/track")
     reuse_landmarks: bool = True
     keyframes: Tuple[int, ...] = tuple()
     photometric: bool = True
     """enable photometric optimization, otherwise only landmark optimization"""
+
 
 @dataclass()
 class StageConfig(Config):
     disable_jawline_landmarks: bool = False
     """Disable the landmark loss for the jawline landmarks since they are not accurate"""
 
+
 @dataclass()
 class StageLmkInitRigidConfig(StageConfig):
     """The stage for initializing the rigid parameters"""
-    num_steps: int = 500
+
+    num_steps: int = 5000
     optimizable_params: tuple[str, ...] = ("cam", "pose")
+
 
 @dataclass()
 class StageLmkInitAllConfig(StageConfig):
     """The stage for initializing all the parameters optimizable with landmark loss"""
+
     num_steps: int = 500
     optimizable_params: tuple[str, ...] = ("cam", "pose", "shape", "joints", "expr")
+    # optimizable_params: tuple[str, ...] = ("cam", "pose")
+
 
 @dataclass()
 class StageLmkSequentialTrackingConfig(StageConfig):
     """The stage for sequential tracking with landmark loss"""
+
     num_steps: int = 50
     optimizable_params: tuple[str, ...] = ("pose", "joints", "expr")
+
 
 @dataclass()
 class StageLmkGlobalTrackingConfig(StageConfig):
     """The stage for global tracking with landmark loss"""
+
     num_epochs: int = 30
     optimizable_params: tuple[str, ...] = ("cam", "pose", "shape", "joints", "expr")
+
 
 @dataclass()
 class PhotometricStageConfig(StageConfig):
     align_texture_except: tuple[str, ...] = ()
     """Align the inner region of rendered FLAME to the image, except for the regions specified"""
-    align_boundary_except: tuple[str, ...] = ("bottomline",)  # necessary to avoid the bottomline of FLAME from being stretched to the bottom of the image
+    align_boundary_except: tuple[str, ...] = (
+        "bottomline",
+    )  # necessary to avoid the bottomline of FLAME from being stretched to the bottom of the image
     """Align the boundary of FLAME to the image, except for the regions specified"""
+
 
 @dataclass()
 class StageRgbInitTextureConfig(PhotometricStageConfig):
     """The stage for initializing the texture map with photometric loss"""
+
     num_steps: int = 500
     optimizable_params: tuple[str, ...] = ("cam", "shape", "texture", "lights")
     align_texture_except: tuple[str, ...] = ("hair", "boundary", "neck")
     align_boundary_except: tuple[str, ...] = ("hair", "boundary")
 
+
 @dataclass()
 class StageRgbInitAllConfig(PhotometricStageConfig):
     """The stage for initializing all the parameters except the offsets with photometric loss"""
+
     num_steps: int = 500
-    optimizable_params: tuple[str, ...] = ("cam", "pose", "shape", "joints", "expr", "texture", "lights")
+    optimizable_params: tuple[str, ...] = (
+        "cam",
+        "pose",
+        "shape",
+        "joints",
+        "expr",
+        "texture",
+        "lights",
+    )
     disable_jawline_landmarks: bool = True
     align_texture_except: tuple[str, ...] = ("hair", "boundary", "neck")
     align_boundary_except: tuple[str, ...] = ("hair", "bottomline")
 
+
 @dataclass()
 class StageRgbInitOffsetConfig(PhotometricStageConfig):
     """The stage for initializing the offsets with photometric loss"""
+
     num_steps: int = 500
-    optimizable_params: tuple[str, ...] = ("cam", "pose", "shape", "joints", "expr", "texture", "lights", "static_offset")
+    optimizable_params: tuple[str, ...] = (
+        "cam",
+        "pose",
+        "shape",
+        "joints",
+        "expr",
+        "texture",
+        "lights",
+        "static_offset",
+    )
     disable_jawline_landmarks: bool = True
     align_texture_except: tuple[str, ...] = ("hair", "boundary", "neck")
+
 
 @dataclass()
 class StageRgbSequentialTrackingConfig(PhotometricStageConfig):
     """The stage for sequential tracking with photometric loss"""
+
     num_steps: int = 50
-    optimizable_params: tuple[str, ...] = ("pose", "joints", "expr", "texture", "dynamic_offset")
+    optimizable_params: tuple[str, ...] = (
+        "pose",
+        "joints",
+        "expr",
+        "texture",
+        "dynamic_offset",
+    )
     disable_jawline_landmarks: bool = True
+
 
 @dataclass()
 class StageRgbGlobalTrackingConfig(PhotometricStageConfig):
     """The stage for global tracking with photometric loss"""
+
     num_epochs: int = 30
-    optimizable_params: tuple[str, ...] = ("cam", "pose", "shape", "joints", "expr", "texture", "lights", "static_offset", "dynamic_offset")
+    optimizable_params: tuple[str, ...] = (
+        "cam",
+        "pose",
+        "shape",
+        "joints",
+        "expr",
+        "texture",
+        "lights",
+        "static_offset",
+        "dynamic_offset",
+    )
     disable_jawline_landmarks: bool = True
+
 
 @dataclass()
 class PipelineConfig(Config):
@@ -304,7 +381,7 @@ class PipelineConfig(Config):
     rgb_sequential_tracking: StageRgbSequentialTrackingConfig
     rgb_global_tracking: StageRgbGlobalTrackingConfig
 
-    
+
 @dataclass()
 class BaseTrackingConfig(Config):
     data: DataConfig
@@ -322,25 +399,33 @@ class BaseTrackingConfig(Config):
     """Begin from the specified frame index for debugging"""
     async_func: bool = True
     """Allow asynchronous function calls for speed up"""
-    device: Literal['cuda', 'cpu'] = 'cuda'
+    device: Literal["cuda", "cpu"] = "cuda"
+    optimize_cam: bool = True
 
     def get_occluded(self):
-        occluded_table = {
-        }
+        occluded_table = {}
         if self.data.sequence in occluded_table:
-            logger.info(f"Automatically setting cfg.model.occluded to {occluded_table[self.data.sequence]}")
+            logger.info(
+                f"Automatically setting cfg.model.occluded to {occluded_table[self.data.sequence]}"
+            )
             self.model.occluded = occluded_table[self.data.sequence]
 
     def __post_init__(self):
         self.get_occluded()
 
         if not self.model.use_static_offset and not self.model.use_dynamic_offset:
-            self.model.occluded = tuple(list(self.model.occluded) + ['hair'])  # disable boundary alignment for the hair region if no offset is used
+            self.model.occluded = tuple(
+                list(self.model.occluded) + ["hair"]
+            )  # disable boundary alignment for the hair region if no offset is used
 
         for cfg_stage in self.pipeline.__dict__.values():
             if isinstance(cfg_stage, PhotometricStageConfig):
-                cfg_stage.align_texture_except = tuple(list(cfg_stage.align_texture_except) + list(self.model.occluded))
-                cfg_stage.align_boundary_except = tuple(list(cfg_stage.align_boundary_except) + list(self.model.occluded))
+                cfg_stage.align_texture_except = tuple(
+                    list(cfg_stage.align_texture_except) + list(self.model.occluded)
+                )
+                cfg_stage.align_boundary_except = tuple(
+                    list(cfg_stage.align_boundary_except) + list(self.model.occluded)
+                )
 
         if self.begin_stage is not None:
             skip = True

@@ -1,8 +1,8 @@
-# 
-# Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual 
-# property and proprietary rights in and to this software and related documentation. 
-# Any commercial use, reproduction, disclosure or distribution of this software and 
-# related documentation without an express license agreement from Toyota Motor Europe NV/SA 
+#
+# Toyota Motor Europe NV/SA and its affiliated companies retain all intellectual
+# property and proprietary rights in and to this software and related documentation.
+# Any commercial use, reproduction, disclosure or distribution of this software and
+# related documentation without an express license agreement from Toyota Motor Europe NV/SA
 # is strictly prohibited.
 #
 
@@ -62,20 +62,30 @@ class NeRSembleDataset(VideoDataset):
             batchify_all_views=batchify_all_views,
         )
         self.load_color_correction()
-    
+
     def match_sequences(self):
         logger.info(f"Subject: {self.cfg.subject}, sequence: {self.cfg.sequence}")
-        return list(filter(lambda x: x.is_dir(), (self.cfg.root_folder / self.cfg.subject).glob(f"{self.cfg.sequence}*")))
-    
+        return list(
+            filter(
+                lambda x: x.is_dir(),
+                (self.cfg.root_folder / self.cfg.subject).glob(f"{self.cfg.sequence}*"),
+            )
+        )
+
     def define_properties(self):
         super().define_properties()
-        self.properties['rgb']['cam_id_prefix'] = "cam_"
-        self.properties['alpha_map']['cam_id_prefix'] = "cam_"
-    
+        self.properties["rgb"]["cam_id_prefix"] = "cam_"
+        self.properties["alpha_map"]["cam_id_prefix"] = "cam_"
+
     def load_camera_params(self, camera_params_path=None):
         if camera_params_path is None:
-            camera_params_path = self.cfg.root_folder / "camera_params" / self.cfg.subject / "camera_params.json"
-        
+            camera_params_path = (
+                self.cfg.root_folder
+                / "camera_params"
+                / self.cfg.subject
+                / "camera_params.json"
+            )
+
         assert camera_params_path.exists()
         param = json.load(open(camera_params_path))
 
@@ -87,10 +97,31 @@ class NeRSembleDataset(VideoDataset):
         else:
             H, W = param["height"], param["width"]
 
-        self.camera_ids =  list(param["world_2_cam"].keys())
-        w2c = torch.tensor([param["world_2_cam"][k] for k in self.camera_ids])  # (N, 4, 4)
+        self.camera_ids = list(param["world_2_cam"].keys())
+        w2c = torch.tensor(
+            [param["world_2_cam"][k] for k in self.camera_ids]
+        )  # (N, 4, 4)
+        # Create a temporary camera_params dict with the raw data
+        raw_camera_params = {}
+        for i, camera_id in enumerate(self.camera_ids):
+            raw_camera_params[camera_id] = {"intrinsic": K, "extrinsic": w2c[i]}
+
+        raw_output_path = (
+            self.cfg.root_folder
+            / self.cfg.subject
+            / f"{self.cfg.subject}_{self.cfg.sequence}_cameras_raw.obj"
+        )
+        camera.visualize_cameras_to_obj(
+            self.camera_ids,
+            raw_camera_params,
+            output_path=str(raw_output_path),
+            target_extrinsic_type="w2c",  # Raw data is in w2c format
+        )
+        logger.info(f"Raw camera visualization saved to {raw_output_path}")
+
         R = w2c[..., :3, :3]
         T = w2c[..., :3, 3]
+        # T *= 0.1348
 
         orientation = R.transpose(-1, -2)  # (N, 3, 3)
         location = R.transpose(-1, -2) @ -T[..., None]  # (N, 3, 1)
@@ -107,7 +138,9 @@ class NeRSembleDataset(VideoDataset):
                 self.cfg.camera_convention_conversion, orientation, K, H, W
             )
 
-        c2w = torch.cat([orientation, location], dim=-1)  # camera-to-world transformation
+        c2w = torch.cat(
+            [orientation, location], dim=-1
+        )  # camera-to-world transformation
 
         if self.cfg.target_extrinsic_type == "w2c":
             R = orientation.transpose(-1, -2)
@@ -117,21 +150,43 @@ class NeRSembleDataset(VideoDataset):
         elif self.cfg.target_extrinsic_type == "c2w":
             extrinsic = c2w
         else:
-            raise NotImplementedError(f"Unknown extrinsic type: {self.cfg.target_extrinsic_type}")
+            raise NotImplementedError(
+                f"Unknown extrinsic type: {self.cfg.target_extrinsic_type}"
+            )
 
         self.camera_params = {}
         for i, camera_id in enumerate(self.camera_ids):
             self.camera_params[camera_id] = {"intrinsic": K, "extrinsic": extrinsic[i]}
-    
+        if True:
+            output_path = (
+                self.cfg.root_folder
+                / self.cfg.subject
+                / f"{self.cfg.subject}_{self.cfg.sequence}_cameras.obj"
+            )
+            camera.visualize_cameras_to_obj(
+                self.camera_ids,
+                self.camera_params,
+                output_path=str(output_path),
+                target_extrinsic_type=self.cfg.target_extrinsic_type,
+            )
+            logger.info(f"Camera visualization saved to {output_path}")
+
     def load_color_correction(self):
         if self.cfg.use_color_correction:
             self.color_correction = {}
 
             for camera_id in self.camera_ids:
-                color_correction_path = self.cfg.root_folder / 'color_correction' / self.cfg.subject / f'{camera_id}.npy'
-                assert color_correction_path.exists(), f"Color correction file not found: {color_correction_path}"
+                color_correction_path = (
+                    self.cfg.root_folder
+                    / "color_correction"
+                    / self.cfg.subject
+                    / f"{camera_id}.npy"
+                )
+                assert (
+                    color_correction_path.exists()
+                ), f"Color correction file not found: {color_correction_path}"
                 self.color_correction[camera_id] = np.load(color_correction_path)
-            
+
     def filter_division(self, division):
         if division is not None:
             cam_for_train = [8, 7, 9, 4, 10, 5, 13, 2, 12, 1, 14, 0]
@@ -156,17 +211,20 @@ class NeRSembleDataset(VideoDataset):
             else:
                 raise NotImplementedError(f"Unknown division type: {division}")
             logger.info(f"division: {division}")
-    
+
     def apply_transforms(self, item):
         item = self.apply_color_correction(item)
         item = super().apply_transforms(item)
         return item
-    
+
     def apply_color_correction(self, item):
         if self.cfg.use_color_correction:
             affine_color_transform = self.color_correction[item["camera_id"]]
             rgb = item["rgb"] / 255
-            rgb = rgb @ affine_color_transform[:3, :3] + affine_color_transform[np.newaxis, :3, 3]
+            rgb = (
+                rgb @ affine_color_transform[:3, :3]
+                + affine_color_transform[np.newaxis, :3, 3]
+            )
             item["rgb"] = (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
         return item
 

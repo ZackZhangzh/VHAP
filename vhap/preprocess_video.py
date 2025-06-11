@@ -54,7 +54,7 @@ def video2frames(video_path: Path, image_dir: Path, keep_video_name: bool=False,
 def robust_video_matting(image_dir: Path, N_warmup: Optional[int]=10):
     print(f'Running robust video matting on images in {image_dir}')
     # model = torch.hub.load("PeterL1n/RobustVideoMatting", "mobilenetv3").cuda()
-    model = torch.hub.load("PeterL1n/RobustVideoMatting", "resnet50").cuda()
+    model = torch.hub.load("RobustVideoMatting", "resnet50"     ,source="local").cuda()
 
     dataset = ImageFolderDataset(image_folder=image_dir)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
