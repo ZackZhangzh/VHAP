@@ -1,8 +1,10 @@
 # Custom
-## Big files
-asset/flame/
+asset/flame
 .history/
 data/
+
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
