@@ -203,7 +203,8 @@ class FlameTracker:
         #     sample["extrinsic"][:, :3, 3] *= 1.0
         #     print("New extrinsic:", sample["extrinsic"])
         if "lmk2d_iris" in sample:
-            sample["lmk2d"] = torch.cat([sample["lmk2d"], sample["lmk2d_iris"]], dim=1)
+            sample["lmk2d"] = torch.cat(
+                [sample["lmk2d"], sample["lmk2d_iris"]], dim=1)
         return sample
 
     def fill_cam_params_into_sample(self, sample):
@@ -333,7 +334,7 @@ class FlameTracker:
             if self.cfg.model.use_dynamic_offset
             else None
         )
-
+        # print(f"rotation: {self.rotation}, translation: {self.translation}")
         ret = self.flame(
             self.shape[None, ...].expand(len(indices), -1),
             self.to_batch(self.expr, indices),
@@ -466,7 +467,8 @@ class FlameTracker:
                 align_boundary_except_vid,
                 enable_disturbance,
             )
-            render_out = {k: v.permute(0, 3, 1, 2) for k, v in render_out.items()}
+            render_out = {k: v.permute(0, 3, 1, 2)
+                          for k, v in render_out.items()}
         elif self.cfg.render.backend == "pytorch3d":
             B = verts.shape[0]  # TODO: double check
             verts_uv = self.flame.face_uvcoords.repeat(B, 1, 1)
@@ -524,7 +526,8 @@ class FlameTracker:
             # RT[:, :3, 3] = RT[:, :3, 3] * self.scaling
         else:
             RT = sample["extrinsic"].to(self.device)
-        pred_lmk_ndc = self.render.world_to_ndc(pred_lmks, RT, K, img_size, flip_y=True)
+        pred_lmk_ndc = self.render.world_to_ndc(
+            pred_lmks, RT, K, img_size, flip_y=True)
         pred_lmk2d = pred_lmk_ndc[:, :, :2]
 
         if not self.cfg.w.always_enable_jawline_landmarks and disable_jawline_landmarks:
@@ -711,7 +714,8 @@ class FlameTracker:
             # texture space
             if not self.cfg.model.tex_painted:
                 reg_tex_pca = (self.tex_pca / std_tex) ** 2
-                log_dict["reg_tex_pca"] = self.cfg.w.reg_tex_pca * reg_tex_pca.mean()
+                log_dict["reg_tex_pca"] = self.cfg.w.reg_tex_pca * \
+                    reg_tex_pca.mean()
 
             # texture map
             if self.cfg.model.tex_extra:
@@ -748,7 +752,8 @@ class FlameTracker:
 
             if self.cfg.w.reg_diffuse is not None and self.lights is not None:
                 diffuse = result_dict["diffuse_detach_normal"]
-                reg_diffuse = F.relu(diffuse.max() - 1) + diffuse.var(dim=1).mean()
+                reg_diffuse = F.relu(diffuse.max() - 1) + \
+                    diffuse.var(dim=1).mean()
                 log_dict["reg_diffuse"] = self.cfg.w.reg_diffuse * reg_diffuse
 
         # offset regularization
@@ -788,13 +793,15 @@ class FlameTracker:
                             region=self.cfg.w.reg_offset_relax_for,
                         )
                         reg_offset *= w
-                    log_dict["reg_offset"] = self.cfg.w.reg_offset * reg_offset.mean()
+                    log_dict["reg_offset"] = self.cfg.w.reg_offset * \
+                        reg_offset.mean()
 
                 if self.cfg.w.reg_offset_rigid is not None:
                     reg_offset_rigid = 0
                     for region in self.cfg.w.reg_offset_rigid_for:
                         vids = self.flame.mask.get_vid_by_region([region])
-                        reg_offset_rigid += offset[:, vids, :].var(dim=-2).mean()
+                        reg_offset_rigid += offset[:,
+                                                   vids, :].var(dim=-2).mean()
                     log_dict["reg_offset_rigid"] = (
                         self.cfg.w.reg_offset_rigid * reg_offset_rigid
                     )
@@ -810,11 +817,13 @@ class FlameTracker:
                         offset_d = self.dynamic_offset[0]
                     else:
                         reg_offset_d = torch.stack(
-                            [self.dynamic_offset[0], self.dynamic_offset[frame_idx - 1]]
+                            [self.dynamic_offset[0],
+                                self.dynamic_offset[frame_idx - 1]]
                         )
                         offset_d = self.dynamic_offset[frame_idx]
 
-                    reg_offset_dynamic = ((offset_d - reg_offset_d) ** 2).mean()
+                    reg_offset_dynamic = (
+                        (offset_d - reg_offset_d) ** 2).mean()
                     log_dict["reg_offset_dynamic"] = (
                         self.cfg.w.reg_offset_dynamic * reg_offset_dynamic
                     )
@@ -843,7 +852,8 @@ class FlameTracker:
             ref_indices = [idx_prev]
 
         E_trans = (
-            (self.translation[[idx]] - self.translation[ref_indices].detach()) ** 2
+            (self.translation[[idx]] -
+             self.translation[ref_indices].detach()) ** 2
         ).mean() * self.cfg.w.smooth_trans
         E_rot = (
             (self.rotation[[idx]] - self.rotation[ref_indices].detach()) ** 2
@@ -906,7 +916,8 @@ class FlameTracker:
         E_joint_prior = 0
         for name, pose in poses:
             # L2 regularization for each joint
-            rotmats = batch_rodrigues(torch.cat([torch.zeros_like(pose), pose], dim=0))
+            rotmats = batch_rodrigues(
+                torch.cat([torch.zeros_like(pose), pose], dim=0))
             diff = ((rotmats[[0]] - rotmats[1:]) ** 2).mean()
 
             # Additional regularization for physical plausibility
@@ -919,7 +930,8 @@ class FlameTracker:
             elif name == "eyes":
                 # penalize the difference between the two eyes
                 diff += (
-                    (self.eyes_pose[[frame_idx], :3] - self.eyes_pose[[frame_idx], 3:])
+                    (self.eyes_pose[[frame_idx], :3] -
+                     self.eyes_pose[[frame_idx], 3:])
                     ** 2
                 ).mean()
 
@@ -1116,7 +1128,8 @@ class FlameTracker:
         def wrapper(*args, **kwargs):
             self = args[0]
             if self.cfg.async_func:
-                thread = threading.Thread(target=func, args=args, kwargs=kwargs)
+                thread = threading.Thread(
+                    target=func, args=args, kwargs=kwargs)
                 thread.start()
             else:
                 func(*args, **kwargs)
@@ -1269,7 +1282,8 @@ class FlameTracker:
             cmap = cm.get_cmap("seismic")
             error_rgb = cmap(error_rgb.cpu())
             error_rgb = (
-                torch.from_numpy(error_rgb[..., :3]).to(gt_rgb).permute(0, 3, 1, 2)
+                torch.from_numpy(error_rgb[..., :3]).to(
+                    gt_rgb).permute(0, 3, 1, 2)
             )
             imgs += [img[None] for img in error_rgb]
 
@@ -1340,12 +1354,14 @@ class FlameTracker:
             imgs += [img[None] for img in overlay_alpha]
 
         if "error_alpha" in output_dict:
-            error_alpha = transfm(output_dict["error_alpha"][view_indices].cpu())
+            error_alpha = transfm(
+                output_dict["error_alpha"][view_indices].cpu())
             error_alpha = error_alpha.mean(dim=1) / 2 + 0.5
             cmap = cm.get_cmap("seismic")
             error_alpha = cmap(error_alpha.cpu())
             error_alpha = (
-                torch.from_numpy(error_alpha[..., :3]).to(gt_rgb).permute(0, 3, 1, 2)
+                torch.from_numpy(error_alpha[..., :3]).to(
+                    gt_rgb).permute(0, 3, 1, 2)
             )
             imgs += [img[None] for img in error_alpha]
         else:
@@ -1388,7 +1404,8 @@ class FlameTracker:
         wh = torch.tensor([[[w, h]]])
         vis_lmk = None
         if "gt_lmk2d" in output_dict:
-            gt_lmk2d = (output_dict["gt_lmk2d"][view_indices].cpu() * 0.5 + 0.5) * wh
+            gt_lmk2d = (output_dict["gt_lmk2d"]
+                        [view_indices].cpu() * 0.5 + 0.5) * wh
             if disable_jawline_landmarks:
                 gt_lmk2d = gt_lmk2d[:, 17:68]
             else:
@@ -1460,7 +1477,8 @@ class FlameTracker:
                     epoch=epoch,
                 )
 
-        self.tb_writer.add_scalar(f"eval_mean/photo", np.mean(photo_loss), epoch)
+        self.tb_writer.add_scalar(
+            f"eval_mean/photo", np.mean(photo_loss), epoch)
 
     def prepare_output_path(
         self,
@@ -1619,7 +1637,8 @@ class GlobalTracker(FlameTracker):
         self.init_params()
 
         if self.cfg.model.flame_params_path is not None:
-            self.load_from_tracked_flame_params(self.cfg.model.flame_params_path)
+            self.load_from_tracked_flame_params(
+                self.cfg.model.flame_params_path)
 
     def detect_landmarks(self, cfg):
         cfg_data = deepcopy(cfg.data)
@@ -1660,14 +1679,16 @@ class GlobalTracker(FlameTracker):
                 detector = LandmarkDetectorSTAR()
                 detector.annotate_landmarks(dataloader)
         else:
-            raise ValueError(f"Unknown landmark source: {cfg.data.landmark_source}")
+            raise ValueError(
+                f"Unknown landmark source: {cfg.data.landmark_source}")
 
     def init_params(self):
         train_tensors = []
 
         # flame model params
         self.shape = torch.zeros(self.cfg.model.n_shape).to(self.device)
-        self.expr = torch.zeros(self.n_timesteps, self.cfg.model.n_expr).to(self.device)
+        self.expr = torch.zeros(
+            self.n_timesteps, self.cfg.model.n_expr).to(self.device)
 
         # joint axis angles
         self.neck_pose = torch.zeros(self.n_timesteps, 3).to(self.device)
@@ -1687,7 +1708,8 @@ class GlobalTracker(FlameTracker):
         if self.cfg.render.lighting_type == "SH":
             self.lights_uniform = torch.zeros(9, 3).to(self.device)
             self.lights_uniform[0] = (
-                torch.tensor([np.sqrt(4 * np.pi)]).expand(3).float().to(self.device)
+                torch.tensor([np.sqrt(4 * np.pi)]
+                             ).expand(3).float().to(self.device)
             )
             self.lights = self.lights_uniform.clone()
         else:
@@ -1732,7 +1754,8 @@ class GlobalTracker(FlameTracker):
             # K contains focal length and principle point
             self.focal_length = torch.tensor([1.5]).to(self.device)
             self.RT = torch.eye(3, 4).to(self.device)
-            self.RT[2, 3] = -1  # (0, 0, -1) in w2c corresponds to (0, 0, 1) in c2w
+            # (0, 0, -1) in w2c corresponds to (0, 0, 1) in c2w
+            self.RT[2, 3] = -1
             train_tensors += [self.focal_length]
         elif self.optimize_cam:
             self.scaling = torch.tensor([1.0]).to(self.device)
@@ -1766,12 +1789,15 @@ class GlobalTracker(FlameTracker):
                 self.optimize_stage("lmk_init_rigid", sample)
                 self.optimize_stage("lmk_init_rigid", sample)
                 self.optimize_stage("lmk_init_all", sample)
+
                 if self.cfg.exp.photometric:
                     self.optimize_stage("rgb_init_texture", sample)
                     self.optimize_stage("rgb_init_all", sample)
                     if self.cfg.model.use_static_offset:
                         self.optimize_stage("rgb_init_offset", sample)
-
+                else:
+                    self.optimize_stage("lmk_init_rigid", sample)
+                    self.optimize_stage("lmk_init_all", sample)
             if self.cfg.exp.photometric:
                 self.optimize_stage("rgb_sequential_tracking", sample)
             else:
@@ -1821,7 +1847,8 @@ class GlobalTracker(FlameTracker):
         else:
             assert dataloader is not None
             num_epochs = self.cfg.pipeline[stage].num_epochs
-            scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
+            scheduler = torch.optim.lr_scheduler.ExponentialLR(
+                optimizer, gamma=0.9)
             for epoch_i in range(num_epochs):
                 self.logger.info(f"EPOCH {epoch_i+1} / {num_epochs}")
                 for step_i, sample in enumerate(dataloader):
@@ -1902,7 +1929,8 @@ class GlobalTracker(FlameTracker):
         for p in self.cfg.pipeline[stage].optimizable_params:
             self.opt_dict[p] = True
 
-        params = defaultdict(list)  # dict to collect parameters to be optimized
+        # dict to collect parameters to be optimized
+        params = defaultdict(list)
 
         # shared properties
         if self.opt_dict["cam"] and not self.calibrated:
@@ -1948,7 +1976,8 @@ class GlobalTracker(FlameTracker):
 
     def initialize_next_timtestep(self, timestep):
         if timestep < self.n_timesteps - 1:
-            self.translation[timestep + 1].data.copy_(self.translation[timestep])
+            self.translation[timestep +
+                             1].data.copy_(self.translation[timestep])
             self.rotation[timestep + 1].data.copy_(self.rotation[timestep])
             self.neck_pose[timestep + 1].data.copy_(self.neck_pose[timestep])
             self.jaw_pose[timestep + 1].data.copy_(self.jaw_pose[timestep])

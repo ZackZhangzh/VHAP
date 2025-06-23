@@ -45,6 +45,8 @@ FLAME_UVMASK_PATH = "asset/flame/uv_masks.npz"
 
 # MRI_LMK_PATH = "/home/zhihao/NeRSemble/visualize_landmarks/full_landmark_points.npy"
 MRI_LMK_PATH = "../data/MRI/70_luo.npy"
+# FLAME_MESH_PATH="../data/MRI/MRI_luotao_fit_scan_70lmk.obj"
+
 
 def to_tensor(array, dtype=torch.float32):
     if "torch.tensor" not in str(type(array)):
@@ -88,7 +90,7 @@ class MRIHead(nn.Module):
     ):
         super().__init__()
 
-        logger.info("Initializing FLAME mesh model...")
+        logger.info("Initializing MRI mesh model...")
 
         self.n_shape_params = shape_params
         self.n_expr_params = expr_params

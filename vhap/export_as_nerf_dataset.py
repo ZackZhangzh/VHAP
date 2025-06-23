@@ -760,6 +760,7 @@ def main(
     subset: Optional[str] = None,
     scale_factor: Optional[float] = None,
     background_color: Optional[str] = None,
+    n_downsample_rgb : Optional[int] = None,
     flame_mode: Literal["mesh", "param"] = "param",
     create_mask_from_mesh: bool = True,
     epoch: int = -1,
@@ -767,6 +768,8 @@ def main(
     print(f"Begin exportation from {src_folder}")
     assert src_folder.exists(), f"Folder not found: {src_folder}"
     src_folder, cfg = load_config(src_folder)
+    # 
+    cfg.data.n_downsample_rgb = n_downsample_rgb
 
     check_epoch(src_folder, epoch)
 
