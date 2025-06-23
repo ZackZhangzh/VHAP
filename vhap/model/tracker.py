@@ -47,13 +47,24 @@ class FlameTracker:
         self.optimize_cam = cfg.optimize_cam
 
         # model
-        self.flame = FlameHead(
-            cfg.model.n_shape,
-            cfg.model.n_expr,
-            add_teeth=cfg.model.add_teeth,
-            remove_lip_inside=cfg.model.remove_lip_inside,
-            face_clusters=cfg.model.tex_clusters,
-        ).to(self.device)
+        if not cfg.exp.photometric:
+            from vhap.model.mri import MRIHead
+            self.flame = MRIHead(
+                cfg.model.n_shape,
+                cfg.model.n_expr,
+                add_teeth=cfg.model.add_teeth,
+                remove_lip_inside=cfg.model.remove_lip_inside,
+                face_clusters=cfg.model.tex_clusters,
+                lmk_path=cfg.lmk_path,
+            ).to(self.device)
+        else:
+            self.flame = FlameHead(
+                cfg.model.n_shape,
+                cfg.model.n_expr,
+                add_teeth=cfg.model.add_teeth,
+                remove_lip_inside=cfg.model.remove_lip_inside,
+                face_clusters=cfg.model.tex_clusters,
+            ).to(self.device)
 
         if cfg.model.tex_painted:
             self.flame_tex_painted = FlameTexPainted(

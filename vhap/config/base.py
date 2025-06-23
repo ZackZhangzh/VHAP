@@ -401,6 +401,7 @@ class BaseTrackingConfig(Config):
     """Allow asynchronous function calls for speed up"""
     device: Literal["cuda", "cpu"] = "cuda"
     optimize_cam: bool = True
+    lmk_path: Optional[Path] = None
 
     def get_occluded(self):
         occluded_table = {}
