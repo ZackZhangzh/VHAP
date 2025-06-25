@@ -47,7 +47,7 @@ class FlameTracker:
         self.optimize_cam = cfg.optimize_cam
 
         # model
-        if not cfg.exp.photometric:
+        if cfg.rigid_fitting:
             from vhap.model.mri import MRIHead
             self.flame = MRIHead(
                 cfg.model.n_shape,
@@ -56,6 +56,7 @@ class FlameTracker:
                 remove_lip_inside=cfg.model.remove_lip_inside,
                 face_clusters=cfg.model.tex_clusters,
                 lmk_path=cfg.lmk_path,
+                flame_template_mesh_path=cfg.mesh_path,
             ).to(self.device)
         else:
             self.flame = FlameHead(
@@ -1789,15 +1790,19 @@ class GlobalTracker(FlameTracker):
                 self.optimize_stage("lmk_init_rigid", sample)
                 self.optimize_stage("lmk_init_rigid", sample)
                 self.optimize_stage("lmk_init_all", sample)
-
-                if self.cfg.exp.photometric:
+                if self.cfg.rigid_fitting:
                     self.optimize_stage("rgb_init_texture", sample)
-                    self.optimize_stage("rgb_init_all", sample)
-                    if self.cfg.model.use_static_offset:
-                        self.optimize_stage("rgb_init_offset", sample)
-                else:
                     self.optimize_stage("lmk_init_rigid", sample)
                     self.optimize_stage("lmk_init_all", sample)
+                else:
+                    if self.cfg.exp.photometric:
+                        self.optimize_stage("rgb_init_texture", sample)
+                        self.optimize_stage("rgb_init_all", sample)
+                        if self.cfg.model.use_static_offset:
+                            self.optimize_stage("rgb_init_offset", sample)
+                    else:
+                        self.optimize_stage("lmk_init_rigid", sample)
+                        self.optimize_stage("lmk_init_all", sample)
             if self.cfg.exp.photometric:
                 self.optimize_stage("rgb_sequential_tracking", sample)
             else:

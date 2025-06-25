@@ -402,6 +402,8 @@ class BaseTrackingConfig(Config):
     device: Literal["cuda", "cpu"] = "cuda"
     optimize_cam: bool = True
     lmk_path: Optional[Path] = None
+    mesh_path: Optional[Path] = None
+    rigid_fitting: bool = False
 
     def get_occluded(self):
         occluded_table = {}
