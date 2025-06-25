@@ -1789,7 +1789,8 @@ class GlobalTracker(FlameTracker):
                 self.optimize_stage("lmk_init_rigid", sample)
                 self.optimize_stage("lmk_init_rigid", sample)
                 self.optimize_stage("lmk_init_all", sample)
-
+                self.optimize_stage("rgb_init_texture", sample)
+                self.optimize_stage("rgb_init_texture", sample)
                 if self.cfg.exp.photometric:
                     self.optimize_stage("rgb_init_texture", sample)
                     self.optimize_stage("rgb_init_all", sample)

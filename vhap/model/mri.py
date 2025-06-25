@@ -36,16 +36,16 @@ logger = get_logger(__name__)
 
 # FLAME_MODEL_PATH = "asset/flame/generic_model.pkl"
 FLAME_MODEL_PATH = "asset/flame/flame2023.pkl"
-FLAME_MESH_PATH = "asset/flame/head_template_mesh.obj"
+# FLAME_MESH_PATH = "asset/flame/head_template_mesh.obj"
 FLAME_PARTS_PATH = "asset/flame/FLAME_masks.pkl"
 FLAME_LMK_PATH = "asset/flame/landmark_embedding_with_eyes.npy"
 FLAME_TEX_PATH = "asset/flame/FLAME_texture.npz"
 FLAME_PAINTED_TEX_PATH = "asset/flame/tex_mean_painted.png"
 FLAME_UVMASK_PATH = "asset/flame/uv_masks.npz"
 
-# MRI_LMK_PATH = "/home/zhihao/NeRSemble/visualize_landmarks/full_landmark_points.npy"
+
 MRI_LMK_PATH = "../data/MRI/70_luo.npy"
-# FLAME_MESH_PATH="../data/MRI/MRI_luotao_fit_scan_70lmk.obj"
+FLAME_MESH_PATH="../data/MRI/MRI_luotao_fit_scan_70lmk_+uv.obj"
 
 
 def to_tensor(array, dtype=torch.float32):
@@ -94,18 +94,23 @@ class MRIHead(nn.Module):
 
         self.n_shape_params = shape_params
         self.n_expr_params = expr_params
-
+        # add faces and uvs
+        verts, faces, aux = load_obj(
+            flame_template_mesh_path, load_textures=False)
+        
         with open(flame_model_path, "rb") as f:
             ss = pickle.load(f, encoding="latin1")
             flame_model = Struct(**ss)
 
         self.dtype = torch.float32
         # The vertices of the template model
+        # self.register_buffer(
+        #     "v_template", to_tensor(
+        #         to_np(flame_model.v_template), dtype=self.dtype)
+        # )
         self.register_buffer(
-            "v_template", to_tensor(
-                to_np(flame_model.v_template), dtype=self.dtype)
+            "v_template", verts.to(dtype=self.dtype)
         )
-
         # 修正：统一buffer名称
         mri_lmks = np.load(lmk_path)  # shape: [N, 3]
         self.register_buffer(
@@ -163,9 +168,7 @@ class MRIHead(nn.Module):
             curr_idx = self.parents[curr_idx]
         self.register_buffer("neck_kin_chain", torch.stack(neck_kin_chain))
 
-        # add faces and uvs
-        verts, faces, aux = load_obj(
-            flame_template_mesh_path, load_textures=False)
+
 
         vertex_uvs = aux.verts_uvs
         face_uvs_idx = faces.textures_idx  # index into verts_uvs
