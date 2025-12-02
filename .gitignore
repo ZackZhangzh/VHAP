@@ -154,3 +154,6 @@ tmp
 output/
 export/
 /data/
+
+
+asset/flame/*

@@ -69,8 +69,9 @@ class NeRSembleDataset(VideoDataset):
     
     def define_properties(self):
         super().define_properties()
-        self.properties['rgb']['cam_id_prefix'] = "cam_"
-        self.properties['alpha_map']['cam_id_prefix'] = "cam_"
+        if not getattr(self.cfg, 'static_camera_motion', False):
+            self.properties['rgb']['cam_id_prefix'] = "cam_"
+            self.properties['alpha_map']['cam_id_prefix'] = "cam_"
     
     def load_camera_params(self, camera_params_path=None):
         if camera_params_path is None:
@@ -122,6 +123,9 @@ class NeRSembleDataset(VideoDataset):
         self.camera_params = {}
         for i, camera_id in enumerate(self.camera_ids):
             self.camera_params[camera_id] = {"intrinsic": K, "extrinsic": extrinsic[i]}
+
+        if getattr(self.cfg, 'static_camera_motion', False):
+            self.camera_ids = ["0"]
     
     def load_color_correction(self):
         if self.cfg.use_color_correction:
@@ -133,6 +137,8 @@ class NeRSembleDataset(VideoDataset):
                 self.color_correction[camera_id] = np.load(color_correction_path)
             
     def filter_division(self, division):
+        if getattr(self.cfg, 'static_camera_motion', False):
+            return
         if division is not None:
             cam_for_train = [8, 7, 9, 4, 10, 5, 13, 2, 12, 1, 14, 0]
             if division == "train":

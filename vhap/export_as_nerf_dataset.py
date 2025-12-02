@@ -149,10 +149,11 @@ class NeRFDatasetWriter:
 
 
 class TrackedFLAMEDatasetWriter:
-    def __init__(self, cfg_model: ModelConfig, src_folder: Path, tgt_folder: Path, mode: Literal['mesh', 'param'], epoch: int = -1):
+    def __init__(self, cfg_data: DataConfig, cfg_model: ModelConfig, src_folder: Path, tgt_folder: Path, mode: Literal['mesh', 'param'], epoch: int = -1):
         print("---- Config: model ----")
         print(tyro.to_yaml(cfg_model))
 
+        self.cfg_data = cfg_data
         self.cfg_model = cfg_model
         self.src_folder = src_folder
         self.tgt_folder = tgt_folder
@@ -246,6 +247,10 @@ class TrackedFLAMEDatasetWriter:
 
             ti_orig = frame['timestep_index_original']  # use ti_orig when loading FLAME parameters
             ti = frame['timestep_index']  # use ti when saving files
+            
+            # For static_camera_motion mode, all frames share the same FLAME parameters (index 0)
+            if getattr(self.cfg_data, 'static_camera_motion', False):
+                ti_orig = 0
 
             # write FLAME mesh or parameters
             if self.mode == 'mesh':
@@ -641,7 +646,7 @@ def main(
     nerf_dataset_writer = NeRFDatasetWriter(cfg.data, tgt_folder, subset, scale_factor, background_color)
     nerf_dataset_writer.write()
 
-    flame_dataset_writer = TrackedFLAMEDatasetWriter(cfg.model, src_folder, tgt_folder, mode=flame_mode, epoch=epoch)
+    flame_dataset_writer = TrackedFLAMEDatasetWriter(cfg.data, cfg.model, src_folder, tgt_folder, mode=flame_mode, epoch=epoch)
     flame_dataset_writer.write()
 
     if create_mask_from_mesh:

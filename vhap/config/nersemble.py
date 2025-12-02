@@ -32,6 +32,9 @@ class NersembleDataConfig(DataConfig):
     """Subject ID. Such as 018, 218, 251, 253"""
     use_color_correction: bool = True
     """Whether to use color correction to harmonize the color of the input images."""
+    static_camera_motion: bool = False
+    """Whether the scene is static (person not moving) but the camera is moving. 
+    If True, it treats each image as a separate timestep but shares the geometry parameters."""
 
 @dataclass()
 class NersembleLossWeightConfig(LossWeightConfig):

@@ -212,7 +212,10 @@ class VideoDataset(Dataset):
         rgb_path = self.get_property_path("rgb", i)
         item["rgb"] = np.array(Image.open(rgb_path))
 
-        camera_param = self.camera_params[item["camera_id"]]
+        if getattr(self.cfg, 'static_camera_motion', False):
+            camera_param = self.camera_params[item["timestep_id"]]
+        else:
+            camera_param = self.camera_params[item["camera_id"]]
         item["intrinsic"] = camera_param["intrinsic"].clone()
         item["extrinsic"] = camera_param["extrinsic"].clone()
 
