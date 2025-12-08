@@ -248,8 +248,8 @@ class TrackedFLAMEDatasetWriter:
             ti_orig = frame['timestep_index_original']  # use ti_orig when loading FLAME parameters
             ti = frame['timestep_index']  # use ti when saving files
             
-            # For static_camera_motion mode, all frames share the same FLAME parameters (index 0)
-            if getattr(self.cfg_data, 'static_camera_motion', False):
+            # For sequential camera motion mode, all frames share the same FLAME parameters (index 0)
+            if getattr(self.cfg_data, 'camera_motion', 'disabled') == 'sequential':
                 ti_orig = 0
 
             # write FLAME mesh or parameters

@@ -216,22 +216,16 @@ class FlameTracker:
         :param flame_params:
         :return:
         """
-        if getattr(self.cfg.data, 'static_camera_motion', False):
-            # Force all timesteps to share the parameters of the first timestep
-            timesteps_geom = torch.zeros_like(timesteps)
-        else:
-            timesteps_geom = timesteps
-
-        dynamic_offset = self.dynamic_offset[timesteps_geom] if self.cfg.model.use_dynamic_offset else None
+        dynamic_offset = self.dynamic_offset[timesteps] if self.cfg.model.use_dynamic_offset else None
 
         ret = self.flame(
             self.shape[None, ...].expand(len(timesteps), -1),
-            self.expr[timesteps_geom],
-            self.rotation[timesteps_geom],
-            self.neck_pose[timesteps_geom],
-            self.jaw_pose[timesteps_geom],
-            self.eyes_pose[timesteps_geom],
-            self.translation[timesteps_geom],
+            self.expr[timesteps],
+            self.rotation[timesteps],
+            self.neck_pose[timesteps],
+            self.jaw_pose[timesteps],
+            self.eyes_pose[timesteps],
+            self.translation[timesteps],
             return_verts_cano=True,
             static_offset=self.static_offset,
             dynamic_offset=dynamic_offset,
@@ -494,7 +488,7 @@ class FlameTracker:
         std_shape = 1
 
         # pose smoothness term
-        if self.opt_dict['pose'] and 'tracking' in stage and not getattr(self.cfg.data, 'static_camera_motion', False):
+        if self.opt_dict['pose'] and 'tracking' in stage:
             E_pose_smooth = self.compute_pose_smooth_energy(timesteps)
             log_dict["smooth_pose"] = E_pose_smooth
 
@@ -502,7 +496,7 @@ class FlameTracker:
         if self.opt_dict['joints']:
             reg_joint = self.compute_joint_L2_energy(timesteps)
             log_dict["reg_joint"] = reg_joint
-            if 'tracking' in stage and not getattr(self.cfg.data, 'static_camera_motion', False):
+            if 'tracking' in stage:
                 joint_smooth = self.compute_joint_smooth_energy(timesteps)
                 log_dict["smooth_joint"] = joint_smooth
 
@@ -510,7 +504,7 @@ class FlameTracker:
         if self.opt_dict['expr']:
             reg_expr = (self.expr[timesteps] / std_expr) ** 2
             log_dict["reg_expr"] = self.cfg.w.reg_expr * reg_expr.mean()
-            if 'tracking' in stage and not getattr(self.cfg.data, 'static_camera_motion', False):
+            if 'tracking' in stage:
                 expr_smooth = self.compute_expr_smooth_energy(timesteps)
                 log_dict["smooth_expr"] = expr_smooth
 
@@ -1215,21 +1209,6 @@ class FlameTracker:
                 if isinstance(v, torch.Tensor):
                     v = v.detach().cpu().numpy()
             export_dict[k] = v
-        
-        # For static_camera_motion mode, replicate index 0 parameters to all timesteps
-        # This ensures consistency when exporting per-timestep data
-        if getattr(self.cfg.data, 'static_camera_motion', False):
-            time_varying_params = ['rotation', 'translation', 'neck_pose', 'jaw_pose', 'eyes_pose', 'expr']
-            if self.cfg.model.use_dynamic_offset:
-                time_varying_params.append('dynamic_offset')
-            
-            for param_name in time_varying_params:
-                if param_name in export_dict:
-                    param = export_dict[param_name]
-                    if len(param.shape) > 1 and param.shape[0] == self.n_timesteps:
-                        # Replicate the first timestep's values to all timesteps
-                        export_dict[param_name] = np.repeat(param[[0]], self.n_timesteps, axis=0)
-                        self.logger.info(f"Replicated {param_name}[0] to all {self.n_timesteps} timesteps for static_camera_motion mode")
 
         export_dict["image_size"] = np.array(self.image_size)
 
@@ -1387,14 +1366,10 @@ class GlobalTracker(FlameTracker):
                         self.optimize_stage('rgb_init_offset', sample)
 
             if self.cfg.exp.photometric:
-                if not getattr(self.cfg.data, 'static_camera_motion', False):
-                    self.optimize_stage('rgb_sequential_tracking', sample)
+                self.optimize_stage('rgb_sequential_tracking', sample)
             else:
-                if not getattr(self.cfg.data, 'static_camera_motion', False):
-                    self.optimize_stage('lmk_sequential_tracking', sample)
-            
-            if not getattr(self.cfg.data, 'static_camera_motion', False):
-                self.initialize_next_timtestep(sample["timestep_index"])
+                self.optimize_stage('lmk_sequential_tracking', sample)
+            self.initialize_next_timtestep(sample["timestep_index"])
         
         self.evaluate(make_visualization=True, epoch=0)
 

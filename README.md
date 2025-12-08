@@ -15,15 +15,15 @@ python rename_images_camera.py \
 --cfg.camera-mode sequential \
 --cfg.image-mode simple_timestep
 
+
+
 python vhap/track_nersemble_v2.py \
 --data.root_folder "/home/zhihao/Publications/data/nersemble_v2" \
 --data.subject $SUBJECT --data.sequence $SEQUENCE \
 --exp.output_folder $OUTPUT_FOLDER/tracking/${SUBJECT}_${SEQUENCE} \
 --data.image-size-during-calibration 3072 3072 \
---data.n_downsample_rgb 4 \
---data.no-use-color-correction \
---data.static_camera_motion
-
+--data.n_downsample_rgb 4 --data.no-use-color-correction \
+--data.camera-motion sequential #disabled,sequential,static
 
 
 

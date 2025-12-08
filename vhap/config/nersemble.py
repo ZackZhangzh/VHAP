@@ -32,9 +32,13 @@ class NersembleDataConfig(DataConfig):
     """Subject ID. Such as 018, 218, 251, 253"""
     use_color_correction: bool = True
     """Whether to use color correction to harmonize the color of the input images."""
-    static_camera_motion: bool = False
-    """Whether the scene is static (person not moving) but the camera is moving. 
-    If True, it treats each image as a separate timestep but shares the geometry parameters."""
+    camera_motion: Literal['disabled', 'sequential', 'static'] = 'disabled'
+    """
+    Control how camera motion and time are interpreted:
+    - 'disabled': Default. Standard multi-view video. T timesteps, N cameras.
+    - 'sequential': Single camera sequence. Treats frames as a time sequence (T=N, C=1) sharing static geometry. Usage: Monocular video of a static object.
+    - 'static': Multi-camera static frame. Treats frames as multiple views at a single instant (T=1, C=N). Usage: Camera array snapshot.
+    """
 
 @dataclass()
 class NersembleLossWeightConfig(LossWeightConfig):

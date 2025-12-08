@@ -212,7 +212,7 @@ class VideoDataset(Dataset):
         rgb_path = self.get_property_path("rgb", i)
         item["rgb"] = np.array(Image.open(rgb_path))
 
-        if getattr(self.cfg, 'static_camera_motion', False):
+        if getattr(self.cfg, 'camera_motion', 'disabled') == 'sequential':
             camera_param = self.camera_params[item["timestep_id"]]
         else:
             camera_param = self.camera_params[item["camera_id"]]

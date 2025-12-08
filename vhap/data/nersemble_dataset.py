@@ -56,11 +56,31 @@ class NeRSembleDataset(VideoDataset):
         self.cfg = cfg
         assert cfg.subject != "", "Please specify the subject name"
 
+        if getattr(cfg, 'camera_motion', 'disabled') == 'static':
+            batchify_all_views = False
+
         super().__init__(
             cfg=cfg,
             img_to_tensor=img_to_tensor,
             batchify_all_views=batchify_all_views,
         )
+        
+        if getattr(self.cfg, 'camera_motion', 'disabled') == 'static':
+            # Force single timestep for static mode
+            self.timestep_ids = ["0"]
+            self.timestep_indices = [0]
+            
+            # Re-generate items for T=1, C=N
+            self.items = []
+            for ci, camera_id in enumerate(self.camera_ids):
+               self.items.append({
+                   "timestep_index": 0,
+                   "timestep_index_original": 0,
+                   "timestep_id": "0", 
+                   "camera_index": ci,
+                   "camera_id": camera_id,
+               })
+
         self.load_color_correction()
     
     def match_sequences(self):
@@ -69,9 +89,14 @@ class NeRSembleDataset(VideoDataset):
     
     def define_properties(self):
         super().define_properties()
-        if not getattr(self.cfg, 'static_camera_motion', False):
+        mode = getattr(self.cfg, 'camera_motion', 'disabled')
+        if mode == 'disabled':
             self.properties['rgb']['cam_id_prefix'] = "cam_"
             self.properties['alpha_map']['cam_id_prefix'] = "cam_"
+        elif mode == 'static':
+            self.properties['rgb']['per_timestep'] = False
+            self.properties['alpha_map']['per_timestep'] = False
+            # cam_id_prefix is NOT set for static mode
     
     def load_camera_params(self, camera_params_path=None):
         if camera_params_path is None:
@@ -124,7 +149,7 @@ class NeRSembleDataset(VideoDataset):
         for i, camera_id in enumerate(self.camera_ids):
             self.camera_params[camera_id] = {"intrinsic": K, "extrinsic": extrinsic[i]}
 
-        if getattr(self.cfg, 'static_camera_motion', False):
+        if getattr(self.cfg, 'camera_motion', 'disabled') == 'sequential':
             self.camera_ids = ["0"]
     
     def load_color_correction(self):
@@ -137,7 +162,7 @@ class NeRSembleDataset(VideoDataset):
                 self.color_correction[camera_id] = np.load(color_correction_path)
             
     def filter_division(self, division):
-        if getattr(self.cfg, 'static_camera_motion', False):
+        if getattr(self.cfg, 'camera_motion', 'disabled') == 'sequential':
             return
         if division is not None:
             cam_for_train = [8, 7, 9, 4, 10, 5, 13, 2, 12, 1, 14, 0]

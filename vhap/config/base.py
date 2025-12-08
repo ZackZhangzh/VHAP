@@ -227,7 +227,7 @@ class StageConfig(Config):
 @dataclass()
 class StageLmkInitRigidConfig(StageConfig):
     """The stage for initializing the rigid parameters"""
-    num_steps: int = 500
+    num_steps: int = 5000
     optimizable_params: tuple[str, ...] = ("cam", "pose")
 
 @dataclass()
