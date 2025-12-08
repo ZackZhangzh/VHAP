@@ -198,8 +198,8 @@ class MRIHead(nn.Module):
                 face_clusters=face_clusters,
             )
 
-        if add_teeth:
-            self.add_teeth()
+        # if add_teeth:
+        #     self.add_teeth()
 
         if connect_lip_inside:
             self.connect_lip_inside()

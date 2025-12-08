@@ -994,9 +994,15 @@ class FlameTracker:
             log_dict["lmk"] = self.cfg.w.landmark * E_lmk
             result_dict.update(_result_dict)
 
-        if stage is None or isinstance(
-            self.cfg.pipeline[stage], PhotometricStageConfig
-        ):
+        # Only compute photometric energy if:
+        # 1. photometric optimization is enabled AND
+        # 2. (stage is None OR stage is a PhotometricStageConfig)
+        should_compute_photo = self.cfg.exp.photometric and (
+            stage is None or isinstance(
+                self.cfg.pipeline[stage], PhotometricStageConfig)
+        )
+
+        if should_compute_photo:
             if self.cfg.w.photo is not None:
                 verts_n = self.repeat_n_times(verts, num_cameras)
                 rast_dict = self.rasterize_flame(
@@ -1463,7 +1469,9 @@ class FlameTracker:
             ) = self.compute_energy(sample, frame_idx)
 
             self.log_scalars(log_dict, frame_idx, session="eval")
-            photo_loss.append(log_dict["photo"].item())
+            # Only record photo_loss when photometric optimization is enabled
+            if "photo" in log_dict:
+                photo_loss.append(log_dict["photo"].item())
 
             if make_visualization:
                 self.log_media(
@@ -1478,8 +1486,221 @@ class FlameTracker:
                     epoch=epoch,
                 )
 
-        self.tb_writer.add_scalar(
-            f"eval_mean/photo", np.mean(photo_loss), epoch)
+        # Only log photo loss if it was computed
+        if photo_loss:
+            self.tb_writer.add_scalar(
+                f"eval_mean/photo", np.mean(photo_loss), epoch)
+
+    @torch.no_grad()
+    def final_evaluation_all_views(self):
+        """
+        Final evaluation after all training: save visualization for ALL views of each frame.
+        This is called at the end of optimize() to generate complete multi-view visualizations.
+        Each view is saved separately to avoid image size limitations.
+        """
+        self.logger.info("Starting final evaluation with all views...")
+
+        # Save original view_indices configuration
+        original_view_indices = self.cfg.log.view_indices
+
+        for frame_idx in range(self.n_timesteps):
+            sample = self.get_current_frame(frame_idx, include_keyframes=False)
+            self.clear_cache()
+            self.fill_cam_params_into_sample(sample)
+
+            # Get number of views for this frame
+            num_views = sample["rgb"].shape[0]
+
+            # Forward pass through FLAME (once for all views)
+            verts, verts_cano, lmks, albedos = self.forward_flame(
+                frame_idx, False)
+            faces = self.flame.faces
+
+            # Save each view separately to avoid image size limitations
+            for view_idx in range(num_views):
+                # Prepare single-view sample
+                single_view_sample = {}
+                for k, v in sample.items():
+                    if isinstance(v, torch.Tensor) and v.shape[0] == num_views:
+                        single_view_sample[k] = v[[view_idx]]
+                    else:
+                        single_view_sample[k] = v
+
+                # Prepare output_dict based on photometric mode
+                if self.cfg.exp.photometric:
+                    # Need to render to get full output_dict
+                    verts_single = verts[[0]]  # Use first frame's vertices
+                    rast_dict = self.rasterize_flame(
+                        single_view_sample, verts_single, faces, train_mode=False)
+
+                    gt_rgb = single_view_sample["rgb"].to(verts)
+                    gt_alpha = single_view_sample["alpha_map"].to(
+                        verts) if "alpha_map" in single_view_sample else None
+                    lights = self.lights[None] if self.lights is not None else None
+                    bg_color = self.get_background_color(
+                        gt_rgb, gt_alpha, stage=None)
+
+                    render_out = self.render_rgba(
+                        rast_dict, verts_single, faces, albedos[[
+                            0]], lights, bg_color,
+                        align_texture_except_fid=None,
+                        align_boundary_except_vid=None,
+                        enable_disturbance=False,
+                    )
+                    output_dict = render_out
+                    output_dict["gt_rgb"] = gt_rgb
+
+                    # Add landmark information
+                    lmks_single = lmks[[0]]
+                    K = single_view_sample["intrinsic"].to(self.device)
+                    if self.optimize_cam:
+                        RT = single_view_sample["extrinsic"].to(self.device)
+                        RT[:, :3, 3] *= self.scaling.float()
+                    else:
+                        RT = single_view_sample["extrinsic"].to(self.device)
+                    pred_lmk_ndc = self.render.world_to_ndc(
+                        lmks_single, RT, K, self.image_size, flip_y=True)
+                    output_dict["pred_lmk2d"] = pred_lmk_ndc[:, :, :2]
+
+                    # Add ground truth landmarks
+                    lmk2d = single_view_sample["lmk2d"].clone().to(verts)
+                    lmk2d_xy = lmk2d[:, :, :2]
+                    from vhap.util.mesh import normalize_image_points
+                    lmk2d_xy[:, :, 0], lmk2d_xy[:, :, 1] = normalize_image_points(
+                        lmk2d_xy[:, :, 0], lmk2d_xy[:, :, 1], self.image_size
+                    )
+                    output_dict["gt_lmk2d"] = lmk2d_xy
+                else:
+                    # Landmark-only mode: minimal output_dict
+                    output_dict = {"gt_rgb": single_view_sample["rgb"]}
+
+                    # Still compute landmarks for visualization
+                    lmks_single = lmks[[0]]
+                    K = single_view_sample["intrinsic"].to(self.device)
+                    if self.optimize_cam:
+                        RT = single_view_sample["extrinsic"].to(self.device)
+                        RT[:, :3, 3] *= self.scaling.float()
+                    else:
+                        RT = single_view_sample["extrinsic"].to(self.device)
+                    pred_lmk_ndc = self.render.world_to_ndc(
+                        lmks_single, RT, K, self.image_size, flip_y=True)
+                    output_dict["pred_lmk2d"] = pred_lmk_ndc[:, :, :2]
+
+                    # Add ground truth landmarks
+                    lmk2d = single_view_sample["lmk2d"].clone().to(verts)
+                    lmk2d_xy = lmk2d[:, :, :2]
+                    from vhap.util.mesh import normalize_image_points
+                    lmk2d_xy[:, :, 0], lmk2d_xy[:, :, 1] = normalize_image_points(
+                        lmk2d_xy[:, :, 0], lmk2d_xy[:, :, 1], self.image_size
+                    )
+                    output_dict["gt_lmk2d"] = lmk2d_xy
+
+                # Save visualization for this specific view
+                # Use custom naming to include view index
+                self.log_media_single_view(
+                    verts[[0]],
+                    faces,
+                    lmks[[0]],
+                    albedos[[0]],
+                    output_dict,
+                    single_view_sample,
+                    frame_idx,
+                    view_idx,
+                    session="final_all_views",
+                )
+
+            if (frame_idx + 1) % 10 == 0:
+                self.logger.info(
+                    f"Final evaluation: processed {frame_idx + 1}/{self.n_timesteps} frames ({num_views} views each)")
+
+        # Restore original configuration
+        self.cfg.log.view_indices = original_view_indices
+        self.logger.info(
+            f"Final evaluation completed. All {self.n_timesteps} frames with all views saved.")
+
+    @torch.no_grad()
+    def log_media_single_view(
+        self,
+        verts: torch.tensor,
+        faces: torch.tensor,
+        lmks: torch.tensor,
+        albedos: torch.tensor,
+        output_dict: dict,
+        sample: dict,
+        frame_idx: int,
+        view_idx: int,
+        session: str,
+    ):
+        """
+        Save visualization for a single view. Similar to log_media but with view-specific naming.
+        """
+        # Save and override view_indices for visualization
+        # Since we already extracted single view data, view index should be 0
+        original_view_indices = self.cfg.log.view_indices
+        self.cfg.log.view_indices = (0,)
+
+        prepare_output_path = partial(
+            self.prepare_output_path_with_view,
+            session=session,
+            frame_idx=frame_idx,
+            view_idx=view_idx,
+        )
+
+        """images"""
+        img = self.visualize_tracking(
+            verts,
+            lmks,
+            albedos,
+            output_dict,
+            sample,
+            disable_jawline_landmarks=False,
+        )
+        img_path = prepare_output_path(
+            folder_name="image_grid", file_type=self.cfg.log.image_format
+        )
+        torchvision.utils.save_image(img, img_path)
+
+        """meshes - only save once per frame (view 0)"""
+        if view_idx == 0:
+            texture_path = prepare_output_path(
+                folder_name="mesh", file_type=self.cfg.log.image_format
+            )
+            mtl_path = prepare_output_path(folder_name="mesh", file_type="mtl")
+            obj_path = prepare_output_path(folder_name="mesh", file_type="obj")
+
+            vertices = verts.squeeze(0).detach().cpu().numpy()
+            faces_np = faces.detach().cpu().numpy()
+            uv_coordinates = self.flame.verts_uvs.cpu().numpy()
+            uv_indices = self.flame.textures_idx.cpu().numpy()
+            self.save_obj_with_texture(
+                vertices,
+                faces_np,
+                uv_coordinates,
+                uv_indices,
+                albedos,
+                obj_path,
+                mtl_path,
+                texture_path,
+            )
+
+        # Restore original view_indices
+        self.cfg.log.view_indices = original_view_indices
+
+    def prepare_output_path_with_view(
+        self,
+        session,
+        frame_idx,
+        view_idx,
+        folder_name,
+        file_type,
+    ):
+        """Prepare output path with view index in filename"""
+        output_folder = self.out_dir / session / folder_name
+        os.makedirs(output_folder, exist_ok=True)
+
+        fname = "frame_{:05d}_view_{:03d}.{}".format(
+            frame_idx, view_idx, file_type)
+        return output_folder / fname
 
     def prepare_output_path(
         self,
@@ -1788,20 +2009,20 @@ class GlobalTracker(FlameTracker):
 
             if timestep == 0:
                 self.optimize_stage("lmk_init_rigid", sample)
-                self.optimize_stage("lmk_init_rigid", sample)
-                self.optimize_stage("lmk_init_all", sample)
+                # self.optimize_stage("lmk_init_rigid", sample)
+                # self.optimize_stage("lmk_init_all", sample)
                 if self.cfg.rigid_fitting:
-                    self.optimize_stage("rgb_init_texture", sample)
-                    self.optimize_stage("lmk_init_rigid", sample)
+                    # self.optimize_stage("rgb_init_texture", sample)
+                    # self.optimize_stage("lmk_init_rigid", sample)
                     self.optimize_stage("lmk_init_all", sample)
                 else:
                     if self.cfg.exp.photometric:
-                        self.optimize_stage("rgb_init_texture", sample)
+                        # self.optimize_stage("rgb_init_texture", sample)
                         self.optimize_stage("rgb_init_all", sample)
                         if self.cfg.model.use_static_offset:
                             self.optimize_stage("rgb_init_offset", sample)
                     else:
-                        self.optimize_stage("lmk_init_rigid", sample)
+                        # self.optimize_stage("lmk_init_rigid", sample)
                         self.optimize_stage("lmk_init_all", sample)
             if self.cfg.exp.photometric:
                 self.optimize_stage("rgb_sequential_tracking", sample)
@@ -1824,6 +2045,9 @@ class GlobalTracker(FlameTracker):
             self.optimize_stage(
                 stage="lmk_global_tracking", dataloader=dataloader, lr_scale=0.1
             )
+
+        # Final evaluation with all views
+        self.final_evaluation_all_views()
 
         self.logger.info("All done.")
 

@@ -221,7 +221,7 @@ class TrackedFLAMEDatasetWriter:
 
         print("Initializing FLAME model...")
         self.flame_model = FlameHead(
-            cfg_model.n_shape, cfg_model.n_expr, add_teeth=True
+            cfg_model.n_shape, cfg_model.n_expr, add_teeth=cfg_model.add_teeth
         )
 
     def relocate_flame_meshes(self, flame_param):
@@ -462,7 +462,7 @@ class MaskFromFLAME:
         )
 
         self.flame_model = FlameHead(
-            cfg_model.n_shape, cfg_model.n_expr, add_teeth=True
+            cfg_model.n_shape, cfg_model.n_expr, add_teeth=cfg_model.add_teeth
         )
 
         self.mesh_renderer = NVDiffRenderer(use_opengl=False)
@@ -604,6 +604,15 @@ def infer_flame_params(flame_model: FlameHead, flame_params: Dict, indices: List
         static_offset = flame_params["static_offset"]
         if isinstance(static_offset, np.ndarray):
             static_offset = torch.tensor(static_offset)
+
+        # Check for vertex count mismatch between the model and the static_offset
+        num_verts_model = flame_model.v_template.shape[0]
+        num_verts_offset = static_offset.shape[0]
+
+        if num_verts_model != num_verts_offset:
+            print(f"WARNING: Vertex count mismatch detected. Model has {num_verts_model} vertices, "
+                  f"but static_offset has {num_verts_offset} vertices. Ignoring static_offset.")
+            static_offset = None
     else:
         static_offset = None
     for k in flame_params:
