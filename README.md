@@ -4,7 +4,7 @@
 
 
 
-SUBJECT=P2_EMO-1
+SUBJECT=zhang_1111_time
 SEQUENCE=EMO-1
 OUTPUT_FOLDER=/home/zhihao/Publications/output
 
@@ -33,3 +33,8 @@ python vhap/export_as_nerf_dataset.py \
 --background-color white 
 
 ```
+
+<!-- TODO -->
+1. 增加可视化views
+2. 脖子锁住?
+3. 
