@@ -451,6 +451,12 @@ class FlameTracker:
         """
         faces_uv = self.flame.textures_idx
         if self.cfg.render.backend == "nvdiffrast":
+            # Check if UV coordinates are available
+            if self.flame.verts_uvs is None:
+                raise RuntimeError(
+                    "UV coordinates not available. This likely means you're in rigid_fitting mode. "
+                    "Make sure to use --exp.no-photometric to skip rendering stages."
+                )
             verts_uv = self.flame.verts_uvs.clone()
             verts_uv[:, 1] = 1 - verts_uv[:, 1]
             tex = albedos
@@ -471,6 +477,12 @@ class FlameTracker:
             render_out = {k: v.permute(0, 3, 1, 2)
                           for k, v in render_out.items()}
         elif self.cfg.render.backend == "pytorch3d":
+            # Check if UV coordinates are available
+            if self.flame.face_uvcoords is None:
+                raise RuntimeError(
+                    "UV coordinates not available. This likely means you're in rigid_fitting mode. "
+                    "Make sure to use --exp.no-photometric to skip rendering stages."
+                )
             B = verts.shape[0]  # TODO: double check
             verts_uv = self.flame.face_uvcoords.repeat(B, 1, 1)
             tex = albedos.expand(B, -1, -1, -1)
@@ -498,6 +510,12 @@ class FlameTracker:
         Renders the rgba image from the rasterization result and
         the optimized texture + lights
         """
+        # Check if UV coordinates are available
+        if self.flame.face_uvcoords is None:
+            raise RuntimeError(
+                "UV coordinates not available. This likely means you're in rigid_fitting mode. "
+                "Make sure to use --exp.no-photometric to skip rendering stages."
+            )
         uv_coords = self.flame.face_uvcoords
         uv_coords = uv_coords.repeat(verts.shape[0], 1, 1)
         return self.render.render_normal(rast_dict, verts, faces, uv_coords)
@@ -1114,6 +1132,18 @@ class FlameTracker:
         mtl_path,
         texture_path,
     ):
+        # Handle case where UV coordinates are not available
+        if uv_coordinates is None or uv_indices is None or albedos is None:
+            # Save simple OBJ without texture
+            with open(obj_path, "w") as f:
+                # Write vertices
+                for v in vertices:
+                    f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
+                # Write faces (OBJ uses 1-based indexing)
+                for face in faces:
+                    f.write(f"f {face[0]+1} {face[1]+1} {face[2]+1}\n")
+            return
+        
         # Save the texture image
         torchvision.utils.save_image(albedos.squeeze(0), texture_path)
 
@@ -1209,8 +1239,15 @@ class FlameTracker:
 
         vertices = verts.squeeze(0).detach().cpu().numpy()
         faces = faces.detach().cpu().numpy()
-        uv_coordinates = self.flame.verts_uvs.cpu().numpy()
-        uv_indices = self.flame.textures_idx.cpu().numpy()
+        
+        # Check if UV coordinates are available
+        if self.flame.verts_uvs is not None:
+            uv_coordinates = self.flame.verts_uvs.cpu().numpy()
+            uv_indices = self.flame.textures_idx.cpu().numpy()
+        else:
+            # No UV coordinates - save mesh without texture
+            uv_coordinates = None
+            uv_indices = None
         self.save_obj_with_texture(
             vertices,
             faces,
@@ -1670,8 +1707,15 @@ class FlameTracker:
 
             vertices = verts.squeeze(0).detach().cpu().numpy()
             faces_np = faces.detach().cpu().numpy()
-            uv_coordinates = self.flame.verts_uvs.cpu().numpy()
-            uv_indices = self.flame.textures_idx.cpu().numpy()
+            
+            # Check if UV coordinates are available
+            if self.flame.verts_uvs is not None:
+                uv_coordinates = self.flame.verts_uvs.cpu().numpy()
+                uv_indices = self.flame.textures_idx.cpu().numpy()
+            else:
+                uv_coordinates = None
+                uv_indices = None
+                
             self.save_obj_with_texture(
                 vertices,
                 faces_np,
@@ -2024,7 +2068,11 @@ class GlobalTracker(FlameTracker):
                     else:
                         # self.optimize_stage("lmk_init_rigid", sample)
                         self.optimize_stage("lmk_init_all", sample)
-            if self.cfg.exp.photometric:
+            
+            # Sequential tracking: skip photometric stages in rigid_fitting mode
+            if self.cfg.rigid_fitting:
+                self.optimize_stage("lmk_sequential_tracking", sample)
+            elif self.cfg.exp.photometric:
                 self.optimize_stage("rgb_sequential_tracking", sample)
             else:
                 self.optimize_stage("lmk_sequential_tracking", sample)

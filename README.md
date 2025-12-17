@@ -147,21 +147,17 @@ SEQUENCE="EMO-1"
 LMK_PATH='../data/MRI/full_landmark_points_53-70.npy'
 MESH_PATH='../data/MRI/MRI_luotao_fit_scan_53lmk_+uv.obj'
 
-SUBJECT="zhang"
+SUBJECT="zhang_1111"
 SEQUENCE="EMO-1" 
-MESH_PATH='../data/MRI/MRI_zhang/FLAME_fitting_zhang_70lmks.obj'
-LMK_PATH='../data/MRI/MRI_zhang/zhang_70lmks.npy'
+LMK_PATH=../data/MRI/facescan/user_landmarks_aligned_68.npy
+MESH_PATH=../data/MRI/facescan/user_mesh_aligned.obj
 
-SUBJECT="XUE"export
-SEQUENCE="EMO-1" 
-MESH_PATH='/home/zhangzhh12024/Avatars/data/nersemble_v2/XUE/xueyiheng.nii.gz.obj'
-LMK_PATH='/home/zhangzhh12024/Avatars/data/nersemble_v2/XUE/XUE.npy'
 # track
 python vhap/track_nersemble_v2.py \
 --data.root_folder "../data/nersemble_v2" \
---exp.output_folder "../output/track/${SUBJECT}_${SEQUENCE}" \
+--exp.output_folder "../output/track/rigid_${SUBJECT}_${SEQUENCE}" \
 --data.subject ${SUBJECT} --data.sequence ${SEQUENCE} \
---data.image-size-during-calibration 2048 2048 \
+--data.image-size-during-calibration 3072 3072 \
 --data.no-use-color-correction --optimize-cam \
 --data.n_downsample_rgb 4 \
 --rigid_fitting --mesh-path ${MESH_PATH} --lmk-path ${LMK_PATH}

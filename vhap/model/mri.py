@@ -94,23 +94,32 @@ class MRIHead(nn.Module):
 
         self.n_shape_params = shape_params
         self.n_expr_params = expr_params
-        # add faces and uvs
-        verts, faces, aux = load_obj(
-            flame_template_mesh_path, load_textures=False)
         
         with open(flame_model_path, "rb") as f:
             ss = pickle.load(f, encoding="latin1")
             flame_model = Struct(**ss)
 
         self.dtype = torch.float32
-        # The vertices of the template model
-        # self.register_buffer(
-        #     "v_template", to_tensor(
-        #         to_np(flame_model.v_template), dtype=self.dtype)
-        # )
-        self.register_buffer(
-            "v_template", verts.to(dtype=self.dtype)
-        )
+        
+        # Load mesh if provided (for visualization and export)
+        # Otherwise use FLAME template (for computing joints)
+        if flame_template_mesh_path is not None:
+            logger.info(f"Loading custom mesh from {flame_template_mesh_path}")
+            verts, faces, aux = load_obj(
+                flame_template_mesh_path, load_textures=True)
+            self.register_buffer(
+                "v_template", verts.to(dtype=self.dtype)
+            )
+            has_custom_mesh = True
+        else:
+            logger.info("No custom mesh provided, using FLAME template")
+            self.register_buffer(
+                "v_template", to_tensor(
+                    to_np(flame_model.v_template), dtype=self.dtype)
+            )
+            has_custom_mesh = False
+            faces = None
+            aux = None
         # 修正：统一buffer名称
         mri_lmks = np.load(lmk_path)  # shape: [N, 3]
         self.register_buffer(
@@ -168,26 +177,42 @@ class MRIHead(nn.Module):
             curr_idx = self.parents[curr_idx]
         self.register_buffer("neck_kin_chain", torch.stack(neck_kin_chain))
 
+        # Process UV coordinates if custom mesh is provided and has UVs
+        if has_custom_mesh and aux is not None and aux.verts_uvs is not None:
+            logger.info("Processing UV coordinates from custom mesh")
+            vertex_uvs = aux.verts_uvs
+            face_uvs_idx = faces.textures_idx  # index into verts_uvs
 
+            # create uvcoords per face --> this is what you can use for uv map rendering
+            # range from -1 to 1 (-1, -1) = left top; (+1, +1) = right bottom
+            # pad 1 to the end
+            pad = torch.ones(vertex_uvs.shape[0], 1)
+            vertex_uvs = torch.cat([vertex_uvs, pad], dim=-1)
+            vertex_uvs = vertex_uvs * 2 - 1
+            vertex_uvs[..., 1] = -vertex_uvs[..., 1]
 
-        vertex_uvs = aux.verts_uvs
-        face_uvs_idx = faces.textures_idx  # index into verts_uvs
+            face_uv_coords = face_vertices(vertex_uvs[None], face_uvs_idx[None])[0]
+            self.register_buffer("face_uvcoords", face_uv_coords, persistent=False)
+            self.register_buffer("faces", faces.verts_idx, persistent=False)
 
-        # create uvcoords per face --> this is what you can use for uv map rendering
-        # range from -1 to 1 (-1, -1) = left top; (+1, +1) = right bottom
-        # pad 1 to the end
-        pad = torch.ones(vertex_uvs.shape[0], 1)
-        vertex_uvs = torch.cat([vertex_uvs, pad], dim=-1)
-        vertex_uvs = vertex_uvs * 2 - 1
-        vertex_uvs[..., 1] = -vertex_uvs[..., 1]
-
-        face_uv_coords = face_vertices(vertex_uvs[None], face_uvs_idx[None])[0]
-        self.register_buffer("face_uvcoords", face_uv_coords, persistent=False)
-        self.register_buffer("faces", faces.verts_idx, persistent=False)
-
-        self.register_buffer("verts_uvs", aux.verts_uvs, persistent=False)
-        self.register_buffer(
-            "textures_idx", faces.textures_idx, persistent=False)
+            self.register_buffer("verts_uvs", aux.verts_uvs, persistent=False)
+            self.register_buffer(
+                "textures_idx", faces.textures_idx, persistent=False)
+        else:
+            # No UV coordinates available (rigid fitting mode or mesh without UVs)
+            logger.info("No UV coordinates available - skipping UV processing")
+            self.register_buffer("face_uvcoords", None, persistent=False)
+            self.register_buffer("verts_uvs", None, persistent=False)
+            self.register_buffer("textures_idx", None, persistent=False)
+            
+            # Register faces from FLAME or custom mesh
+            if has_custom_mesh and faces is not None:
+                self.register_buffer("faces", faces.verts_idx, persistent=False)
+            else:
+                # Use FLAME faces as fallback
+                self.register_buffer("faces", 
+                    to_tensor(to_np(flame_model.f), dtype=torch.long), 
+                    persistent=False)
 
         if include_mask:
             self.mask = FlameMask(
@@ -654,31 +679,58 @@ class MRIHead(nn.Module):
         template_vertices = self.v_template.unsqueeze(
             0).expand(batch_size, -1, -1)
 
-        # Add shape contribution
-        v_shaped = template_vertices + blend_shapes(betas, self.shapedirs)
+        # Check if mesh topology matches FLAME (for deformation)
+        # If not, we're in rigid-only mode (custom mesh with different topology)
+        use_rigid_only = (self.v_template.shape[0] != self.shapedirs.shape[0])
+        
+        if use_rigid_only and not hasattr(self, '_rigid_mode_logged'):
+            logger.info(
+                f"Rigid-only mode: custom mesh has {self.v_template.shape[0]} vertices, "
+                f"FLAME has {self.shapedirs.shape[0]} vertices - skipping deformation"
+            )
+            self._rigid_mode_logged = True
+        
+        if use_rigid_only:
+            # Rigid-only mode: no deformation, only rigid transformation
+            # This is used when custom mesh topology doesn't match FLAME
+            v_shaped = template_vertices
+            
+            # For rigid mode, we don't need joints - just apply translation directly
+            # Use a dummy joint at origin for compatibility
+            J = torch.zeros(batch_size, 5, 3, device=template_vertices.device, dtype=self.dtype)
+            
+            vertices = template_vertices
+            if zero_centered_at_root_node:
+                vertices = vertices - J[:, [0]]
+            vertices = vertices + translation[:, None, :]
+            
+        else:
+            # Full deformable mode: FLAME topology
+            # Add shape contribution
+            v_shaped = template_vertices + blend_shapes(betas, self.shapedirs)
 
-        # Add personal offsets
-        if static_offset is not None:
-            v_shaped += static_offset
-        if dynamic_offset is not None:
-            v_shaped += dynamic_offset
+            # Add personal offsets
+            if static_offset is not None:
+                v_shaped += static_offset
+            if dynamic_offset is not None:
+                v_shaped += dynamic_offset
 
-        vertices, J, mat_rot = lbs(
-            full_pose,
-            v_shaped,
-            self.posedirs,
-            self.J_regressor,
-            self.parents,
-            self.lbs_weights,
-            dtype=self.dtype,
-        )
+            vertices, J, mat_rot = lbs(
+                full_pose,
+                v_shaped,
+                self.posedirs,
+                self.J_regressor,
+                self.parents,
+                self.lbs_weights,
+                dtype=self.dtype,
+            )
 
-        if zero_centered_at_root_node:
-            vertices = vertices - J[:, [0]]
-            J = J - J[:, [0]]
+            if zero_centered_at_root_node:
+                vertices = vertices - J[:, [0]]
+                J = J - J[:, [0]]
 
-        vertices = vertices + translation[:, None, :]
-        J = J + translation[:, None, :]
+            vertices = vertices + translation[:, None, :]
+            J = J + translation[:, None, :]
 
         ret_vals = [vertices]
 

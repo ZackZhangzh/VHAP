@@ -416,6 +416,15 @@ class BaseTrackingConfig(Config):
     def __post_init__(self):
         self.get_occluded()
 
+        # Automatically disable non-rigid deformations in rigid_fitting mode
+        if self.rigid_fitting:
+            if self.model.use_static_offset or self.model.use_dynamic_offset:
+                logger.info(
+                    "Rigid fitting mode enabled: automatically disabling static and dynamic offsets"
+                )
+            self.model.use_static_offset = False
+            self.model.use_dynamic_offset = False
+
         if not self.model.use_static_offset and not self.model.use_dynamic_offset:
             self.model.occluded = tuple(
                 list(self.model.occluded) + ["hair"]
